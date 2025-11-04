@@ -1,19 +1,20 @@
 # ======================================================
-# Backend Dockerfile (Node 22 + better-sqlite3 fix)
+# ✅ Backend Dockerfile (Node 22 + better-sqlite3 fix)
+# Fully compatible with Alpine 3.19–3.20 and Node 22.x
 # ======================================================
 
 FROM node:22-alpine AS build
 
-# Install build dependencies for native Node modules
-RUN apk add --no-cache python3 py3-setuptools make g++ pkgconfig
+# Install full build toolchain for native modules (better-sqlite3)
+RUN apk add --no-cache python3 python3-dev make g++ pkgconfig
 
 WORKDIR /app
 COPY package*.json ./
 
-# Install production dependencies (compile native modules)
-RUN npm ci --omit=dev
+# Use npm install to avoid Alpine's musl prebuild mismatch
+RUN npm install --omit=dev
 
-# Copy application code
+# Copy rest of the source code
 COPY . .
 
 # ======================================================
