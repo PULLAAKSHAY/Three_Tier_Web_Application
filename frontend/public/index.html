@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Simple 3-tier CRUD</title>
+    <style>
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        max-width: 900px;
+        margin: 40px auto;
+      }
+      input,
+      textarea {
+        width: 100%;
+        padding: 8px;
+        margin: 6px 0;
+      }
+      .item {
+        border: 1px solid #ddd;
+        padding: 8px;
+        margin: 6px 0;
+      }
+      button {
+        padding: 6px 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Items</h1>
+    <form id="create">
+      <input name="name" placeholder="Name" required />
+      <textarea name="description" placeholder="Description"></textarea>
+      <button>Create</button>
+    </form>
+    <div id="list"></div>
+
+    <script>
+      const API = "/api/items";
+
+      async function load() {
+        const list = document.getElementById("list");
+        list.innerHTML = "Loading...";
+        const res = await fetch(API);
+        const items = await res.json();
+        list.innerHTML = items
+          .map(
+            (i) => `
+<div class="item" data-id="${i.id}">
+<strong>${i.name}</strong>
+<p>${i.description || ""}</p>
+<button onclick="del(${i.id})">Delete</button>
+</div>`
+          )
+          .join("");
+      }
+
+      async function del(id) {
+        await fetch(API + "/" + id, { method: "DELETE" });
+        load();
+      }
+
+      document
+        .getElementById("create")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const fd = new FormData(e.target);
+          await fetch(API, {
+            method: "POST",
+            body: JSON.stringify({
+              name: fd.get("name"),
+              description: fd.get("description"),
+            }),
+            headers: { "content-type": "application/json" },
+          });
+          e.target.reset();
+          load();
+        });
+
+      load();
+    </script>
+  </body>
+</html>
