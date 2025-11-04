@@ -1,45 +1,50 @@
-# ======================================================
-# ✅ 100% FIXED Dockerfile — No prebuilt binaries
-# ======================================================
+# ============================================================
+# ✅ OPTIMIZED DOCKERFILE - Better-SQLite3 built from source
+# ============================================================
+
 FROM node:20-bookworm AS builder
 
-# Install necessary build tools
-RUN apt-get update && apt-get install -y \
-    python3 make g++ libsqlite3-dev sqlite3 ca-certificates \
+# Install ONLY required build dependencies (sqlite3 client not needed)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ libsqlite3-dev ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy dependency files
+# Copy dependency manifests first for caching
 COPY package*.json ./
 
-# Prevent downloading any prebuilt binaries
+# Force source build for better-sqlite3 via ENV (npm flags are invalid)
 ENV npm_config_build_from_source=true
-ENV npm_config_prebuilt_binaries=false
 ENV npm_config_unsafe_perm=true
 
-# Install dependencies (skip prebuilt binary)
-RUN npm install --omit=dev
+# Install dependencies (omit dev dependencies for production)
+RUN npm ci --omit=dev
 
-# Delete any cached prebuilt binaries (just in case)
-RUN rm -rf node_modules/better-sqlite3/build
+# Explicit rebuild for better-sqlite3 (redundant but safe)
+RUN npm rebuild better-sqlite3
 
-# Force local rebuild of better-sqlite3 from source
-RUN npm rebuild better-sqlite3 --build-from-source
-
-# Copy application code
+# Copy application source
 COPY . .
 
-# ======================================================
-# Runtime stage
-# ======================================================
+# ============================================================
+# ✅ Production runtime image
+# ============================================================
 FROM node:20-bookworm-slim
+
+# Install required runtime dependencies (SQLite shared lib)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsqlite3-0 \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
+# Copy built application from builder stage
 COPY --from=builder /app /app
 
-# Validate that binary is glibc-compatible
-RUN file /app/node_modules/better-sqlite3/build/Release/better_sqlite3.node || true
+# Security hardening: non-root user
+RUN useradd -m appuser && chown -R appuser /app
+USER appuser
 
 ENV NODE_ENV=production
 ENV PORT=3000
