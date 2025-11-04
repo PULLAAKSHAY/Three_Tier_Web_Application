@@ -4,12 +4,12 @@
 
 FROM node:20-slim AS build
 
-# Install full build toolchain
-RUN apt-get update && apt-get install -y python3 make g++ pkg-config sqlite3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    python3 make g++ pkg-config sqlite3 \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY package*.json ./
-
 RUN npm ci --omit=dev
 COPY . .
 
