@@ -1,22 +1,26 @@
-# ======================================================
-# ✅ Backend Dockerfile (Node 20-slim + better-sqlite3 stable)
-# ======================================================
+# Use full Debian-based Node image for both build & runtime
+FROM node:20-bookworm-slim
 
-FROM node:20-slim AS build
-
-RUN apt-get update && apt-get install -y \
-    python3 make g++ pkg-config sqlite3 \
- && rm -rf /var/lib/apt/lists/*
+# Install dependencies needed for better-sqlite3
+RUN apt-get update && apt-get install -y python3 make g++ libsqlite3-dev sqlite3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Copy package files first for dependency caching
 COPY package*.json ./
-RUN npm ci --omit=dev
+
+# Install production dependencies only
+RUN npm install --omit=dev
+
+# Copy all source files
 COPY . .
 
-FROM node:20-slim
-WORKDIR /app
-COPY --from=build /app /app
+# Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
+
+# Expose backend port
 EXPOSE 3000
+
+# Start the backend
 CMD ["node", "src/app.js"]
