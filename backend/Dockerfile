@@ -1,26 +1,25 @@
-# Use full Debian-based Node image for both build & runtime
+# Use full Debian-based image to ensure binary compatibility
 FROM node:20-bookworm-slim
 
-# Install dependencies needed for better-sqlite3
+# Install required build tools and libraries for better-sqlite3
 RUN apt-get update && apt-get install -y python3 make g++ libsqlite3-dev sqlite3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy package files first for dependency caching
+# Copy only package files first
 COPY package*.json ./
 
-# Install production dependencies only
-RUN npm install --omit=dev
+# Clean any prebuilt native modules and install dependencies fresh
+RUN npm install --build-from-source better-sqlite3 --omit=dev
 
-# Copy all source files
+# Copy the rest of your backend code
 COPY . .
 
-# Set environment variables
+# Environment and port settings
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Expose backend port
 EXPOSE 3000
 
-# Start the backend
+# Run the app
 CMD ["node", "src/app.js"]
