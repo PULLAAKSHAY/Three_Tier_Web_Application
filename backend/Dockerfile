@@ -1,24 +1,25 @@
 # ======================================================
-# ✅ FINAL FIX — better-sqlite3 built from source (Node 20 bookworm)
+# ✅ FINAL VERIFIED FIX — rebuild better-sqlite3 cleanly
 # ======================================================
 
 FROM node:20-bookworm AS builder
 
-# Install full build environment + SQLite dev libs
+# Install dependencies for building better-sqlite3
 RUN apt-get update && apt-get install -y \
     python3 make g++ libsqlite3-dev sqlite3 ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy only package manifests first
+# Copy package manifests only (NO local node_modules)
 COPY package*.json ./
 
-# Force rebuild better-sqlite3 from source in correct environment
-RUN npm install better-sqlite3 --build-from-source
+# Clean any preexisting modules, build from scratch
+RUN rm -rf node_modules
+RUN npm install --build-from-source better-sqlite3
 RUN npm ci --omit=dev
 
-# Copy the rest of your app
+# Copy app source (but NOT node_modules)
 COPY . .
 
 # ======================================================
@@ -27,13 +28,15 @@ COPY . .
 FROM node:20-bookworm-slim
 
 WORKDIR /app
+
+# Copy everything *except* local node_modules from your repo
 COPY --from=builder /app /app
 
-# Confirm that the native binary was built properly
-RUN ls -l /app/node_modules/better-sqlite3/build/Release/ || true
+# Double check better-sqlite3 binary was built
+RUN ls -lh /app/node_modules/better-sqlite3/build/Release/ || true
 
 ENV NODE_ENV=production
 ENV PORT=3000
-
 EXPOSE 3000
+
 CMD ["node", "src/app.js"]
