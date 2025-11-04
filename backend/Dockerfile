@@ -1,33 +1,36 @@
 # ======================================================
-# ✅ FINAL FIX — builds better-sqlite3 inside bookworm
+# ✅ FINAL FIX — build better-sqlite3 from source correctly
 # ======================================================
-
-# Stage 1 — Builder
 FROM node:20-bookworm AS builder
 
-# Install build tools & SQLite headers
+# Install full build environment + SQLite dev libs
 RUN apt-get update && apt-get install -y \
-    python3 make g++ libsqlite3-dev sqlite3 \
+    python3 make g++ libsqlite3-dev sqlite3 ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy package manifests
+# Copy only package manifests first
 COPY package*.json ./
 
-# Install dependencies and force build better-sqlite3 from source
-RUN npm install --build-from-source better-sqlite3 --omit=dev
+# Force rebuild better-sqlite3 from source in correct environment
+RUN npm config set unsafe-perm true
+RUN npm install better-sqlite3 --build-from-source
+RUN npm ci --omit=dev
 
-# Copy rest of application
+# Copy the rest of your app
 COPY . .
 
-# Stage 2 — Runtime
+# ======================================================
+# Runtime Image
+# ======================================================
 FROM node:20-bookworm-slim
 
 WORKDIR /app
-
-# Copy all built files and native binaries from builder
 COPY --from=builder /app /app
+
+# Confirm the native binary exists in runtime
+RUN ls -l /app/node_modules/better-sqlite3/build/Release/
 
 ENV NODE_ENV=production
 ENV PORT=3000
