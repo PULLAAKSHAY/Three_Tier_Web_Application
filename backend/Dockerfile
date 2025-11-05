@@ -1,12 +1,12 @@
 # Builder stage - use Ubuntu-based image for proper Linux binary compilation
 FROM --platform=linux/amd64 ubuntu:24.04 AS builder
 
-# Install build dependencies
+# Install build dependencies including gnupg for Node.js installation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl wget git python3 make g++ gcc \
     libsqlite3-dev pkg-config ca-certificates \
     libssl-dev libatomic1 build-essential \
-    file binutils && \
+    file binutils gnupg gnupg2 gnupg1 && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 20.x from official repository
