@@ -1,40 +1,40 @@
-# ============================================================
-# ✅ OPTIMIZED DOCKERFILE - Better-SQLite3 built from source
-# ============================================================
+# Builder stage - use same base as runtime for library compatibility
+FROM node:20.19.5-bookworm AS builder
 
-FROM node:20-bookworm AS builder
-
-# Install ONLY required build dependencies (sqlite3 client not needed)
+# Install build dependencies (x86-specific)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ libsqlite3-dev ca-certificates \
+    python3 make g++ libsqlite3-dev ca-certificates pkg-config \
+    build-essential libssl-dev curl wget git \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy dependency manifests first for caching
+# Copy package files first
 COPY package*.json ./
 
-# Force source build for better-sqlite3 via ENV (npm flags are invalid)
+# Set proper build environment
 ENV npm_config_build_from_source=true
 ENV npm_config_unsafe_perm=true
+ENV npm_config_optional=true
+ENV npm_config_arch=x64
 
-# Install dependencies (omit dev dependencies for production)
-RUN npm ci --omit=dev
+# Clear npm cache and install dependencies
+RUN npm cache clean --force && npm ci --omit=dev --verbose
 
-# Explicit rebuild for better-sqlite3 (redundant but safe)
-RUN npm rebuild better-sqlite3
+# Force rebuild better-sqlite3 with verbose logging
+RUN npm rebuild better-sqlite3 --build-from-source --verbose
 
-# Copy application source
+# Copy application code
 COPY . .
 
 # ============================================================
-# ✅ Production runtime image
+# ✅ Production runtime image (x86-optimized)
 # ============================================================
-FROM node:20-bookworm-slim
+FROM node:20.19.5-bookworm-slim
 
-# Install required runtime dependencies (SQLite shared lib)
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libsqlite3-0 \
+    libsqlite3-0 libstdc++6 libc6 \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -42,12 +42,21 @@ WORKDIR /app
 # Copy built application from builder stage
 COPY --from=builder /app /app
 
-# Security hardening: non-root user
-RUN useradd -m appuser && chown -R appuser /app
+# Verify the native module was built correctly
+RUN ls -la /app/node_modules/better-sqlite3/build/Release/ && \
+    file /app/node_modules/better-sqlite3/build/Release/better_sqlite3.node
+
+# Security hardening
+RUN groupadd -r appuser && useradd -r -g appuser appuser && \
+    chown -R appuser:appuser /app
 USER appuser
 
 ENV NODE_ENV=production
 ENV PORT=3000
 EXPOSE 3000
+
+# Health check to catch startup failures
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+    CMD node -e "require('./src/db.js')" || exit 1
 
 CMD ["node", "src/app.js"]

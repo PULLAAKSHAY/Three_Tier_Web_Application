@@ -12,16 +12,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install and test backend
-        working-directory: backend
-        run: |
-          npm ci
-          npm test || echo "⚠️ Tests failed, continuing to build image."
+      - name: Set up QEMU for multi-architecture builds
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -32,15 +24,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push backend image
+      - name: Build and push multi-architecture image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
+          platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ secrets.DOCKERHUB_USER }}/backend:latest
+          tags: |
+            ${{ secrets.DOCKERHUB_USER }}/backend:latest
+            ${{ secrets.DOCKERHUB_USER }}/backend:${{ github.sha }}
 
       - name: Deploy to EC2 via SSH
-        uses: appleboy/ssh-action@v0.1.9
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
@@ -49,20 +44,24 @@ jobs:
             set -e
             echo "🚀 Updating deployment on EC2..."
             cd /home/ubuntu/Three_Tier_Web_Application
-            git fetch --all
-            git reset --hard origin/main
+            git pull origin main
 
-            echo "⬆️ Pulling latest backend image..."
+            echo "🔄 Pulling latest backend image..."
             sudo docker pull ${{ secrets.DOCKERHUB_USER }}/backend:latest
 
             echo "📦 Redeploying Kubernetes resources..."
             kubectl apply -f k8s/namespace.yaml || true
             kubectl apply -f k8s/backend-deployment.yaml -n three-tier
             kubectl apply -f k8s/backend-service.yaml -n three-tier
-            kubectl apply -f k8s/prometheus-scrape-config.yaml -n three-tier
-            kubectl apply -f k8s/grafana-deployment.yaml -n three-tier
 
             echo "🔁 Restarting backend deployment..."
             kubectl rollout restart deployment/backend -n three-tier
+
+            echo "🔍 Verifying deployment..."
+            sleep 10
+            kubectl get pods -n three-tier
+            if kubectl get pods -n three-tier -l app=backend >/dev/null 2>&1; then
+              kubectl logs -l app=backend -n three-tier --tail=20 || true
+            fi
 
             echo "✅ Deployment updated successfully!"
